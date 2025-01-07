@@ -1,0 +1,19 @@
+{
+    "name": "dailydesk/monitor-php",
+    "description": "DailyDesk Monitor for PHP applications.",
+    "license": "MIT",
+    "require": {
+        "php": ">=7.2",
+        "inspector-apm/inspector-php": "^3.8"
+    },
+    "autoload": {
+        "psr-4": {
+            "DailyDesk\\Monitor\\": "src/"
+        }
+    },
+    "extra": {
+        "branch-alias": {
+            "dev-main": "1.x-dev"
+        }
+    }
+}
