@@ -12,8 +12,12 @@ class SyncTransport extends CurlTransport
     public function sendChunk($data)
     {
         $url = $this->config->getUrl();
-        $this->config->setUrl($url . '/ingest/entries');
+        $this->config->setUrl(
+            trim($url, '/') . '/ingest/entries'
+        );
+
         parent::sendChunk($data);
+
         $this->config->setUrl($url);
     }
 
