@@ -2,11 +2,12 @@
 
 namespace DailyDesk\Monitor;
 
+use DailyDesk\Monitor\Transports\CurlTransport;
 use DailyDesk\Monitor\Transports\NullTransport;
-use DailyDesk\Monitor\Transports\SyncTransport;
 use Exception;
 use Inspector\Exceptions\InspectorException;
 use Inspector\Inspector;
+use Inspector\Models\Error;
 use Inspector\Models\PerformanceModel;
 use Inspector\Models\Segment;
 use Inspector\Models\Transaction;
@@ -31,10 +32,10 @@ class Monitor extends Inspector
         }
 
         if ($this->configuration->getTransport() === 'null') {
-            $this->setTransport(new NullTransport);
+            $this->setTransport(new NullTransport());
         } else {
             $this->setTransport(
-                new SyncTransport($configuration)
+                new CurlTransport($configuration)
             );
         }
     }
@@ -57,18 +58,14 @@ class Monitor extends Inspector
      */
     public function startTransaction($name): Transaction
     {
-        if (!is_string($name)) {
+        if (! is_string($name)) {
             throw new InvalidArgumentException('Transaction name must be a string.');
         }
         if ($name == '') {
             throw new InvalidArgumentException('Transaction name cannot be empty.');
         }
 
-        $transaction = parent::startTransaction($name);
-
-        $transaction->hash = 'transaction-' . $transaction->hash;
-
-        return $transaction;
+        return parent::startTransaction($name);
     }
 
     /**
@@ -79,7 +76,7 @@ class Monitor extends Inspector
      */
     public function startSegment($type, $label = null)
     {
-        if (!is_string($type)) {
+        if (! is_string($type)) {
             throw new InvalidArgumentException('Segment type must be a string.');
         }
 
@@ -87,7 +84,7 @@ class Monitor extends Inspector
             throw new InvalidArgumentException('Segment type cannot be empty.');
         }
 
-        if (!is_string($label)) {
+        if (! is_string($label)) {
             throw new InvalidArgumentException('Segment label must be a string.');
         }
 
@@ -97,8 +94,55 @@ class Monitor extends Inspector
 
         $segment = parent::startSegment($type, $label);
 
-        $segment->hash = 'segment-' . (new Transaction('tmp'))->generateUniqueHash();
+        $segment->hash = (new Transaction('tmp'))->generateUniqueHash();
+
+        $segment->transaction = [
+            'hash' => $segment->transaction['hash'],
+        ];
+
+        unset($segment->host);
 
         return $segment;
+    }
+
+    public function reportException(\Throwable $exception, $handled = true)
+    {
+        if (!$this->hasTransaction()) {
+            $this->startDefaultTransaction();
+        }
+
+        $this->transaction()->setResult('error');
+
+        $segment = $this->startSegment('error', $exception->getMessage());
+
+        $error = (new Error($exception, $this->transaction))->setHandled($handled);
+        $segment->end();
+
+        unset($error->host, $error->transaction);
+        $error->segment = [
+            'hash' => $segment->hash,
+        ];
+
+        $this->addEntries($error);
+
+        return $error;
+    }
+
+    private function startDefaultTransaction()
+    {
+        if ($this->isRunningInConsole()) {
+            $type = 'command';
+            $name = implode(' ', $_SERVER['argv']);
+        } else {
+            $type = 'request';
+            $name = $_SERVER['REQUEST_METHOD'] . ' ' . $_SERVER['REQUEST_URI'];
+        }
+
+        return $this->startTransaction($name)->setType($type);
+    }
+
+    private function isRunningInConsole(): bool
+    {
+        return \PHP_SAPI === 'cli' || \PHP_SAPI === 'phpdbg';
     }
 }

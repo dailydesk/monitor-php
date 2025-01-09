@@ -2,14 +2,14 @@
 
 use DailyDesk\Monitor\Configuration;
 use DailyDesk\Monitor\Monitor;
+use DailyDesk\Monitor\Transports\CurlTransport;
 use DailyDesk\Monitor\Transports\NullTransport;
-use DailyDesk\Monitor\Transports\SyncTransport;
 
 test('it accepts a string in the constructor.', function () {
     $monitor = new Monitor('an-ingestion-key');
 
     $this->assertInstanceOf(Configuration::class, $monitor->getConfiguration());
-    $this->assertInstanceOf(SyncTransport::class, $monitor->getTransport());
+    $this->assertInstanceOf(CurlTransport::class, $monitor->getTransport());
 
     $this->assertSame('an-ingestion-key', $monitor->getConfiguration()->getIngestionKey());
 });
@@ -20,7 +20,7 @@ test('it accepts an instanceof DailyDesk\Monitor\Configuration in the constructo
     $monitor = new Monitor($configuration);
 
     $this->assertSame($configuration, $monitor->getConfiguration());
-    $this->assertInstanceOf(SyncTransport::class, $monitor->getTransport());
+    $this->assertInstanceOf(CurlTransport::class, $monitor->getTransport());
 
     $this->assertSame('an-ingestion-key', $monitor->getConfiguration()->getIngestionKey());
 });
@@ -29,15 +29,15 @@ test('it does not accept a value that is not either a string or an instance of D
     try {
         new Monitor(123);
         $this->fail('It must throw an exception here.');
-    } catch (\Exception $e) {
+    } catch (Exception $e) {
         $this->assertInstanceOf(InvalidArgumentException::class, $e);
         $this->assertSame('$configuration must be a string or an instance of ' . Configuration::class, $e->getMessage());
     }
 
     try {
-        new Monitor(new \stdClass);
+        new Monitor(new \stdClass());
         $this->fail('It must throw an exception here.');
-    } catch (\Exception $e) {
+    } catch (Exception $e) {
         $this->assertInstanceOf(InvalidArgumentException::class, $e);
         $this->assertSame('$configuration must be a string or an instance of ' . Configuration::class, $e->getMessage());
     }
@@ -58,7 +58,7 @@ test('it requires the transaction name to not be empty.', function () {
 test('it requires the segment type to be a string.', function () {
     $monitor = new Monitor('an-ingestion-key');
 
-    $monitor->setTransport(new NullTransport);
+    $monitor->setTransport(new NullTransport());
 
     $monitor->startTransaction('test');
 
@@ -68,7 +68,7 @@ test('it requires the segment type to be a string.', function () {
 test('it requires the segment type to not be empty.', function () {
     $monitor = new Monitor('an-ingestion-key');
 
-    $monitor->setTransport(new NullTransport);
+    $monitor->setTransport(new NullTransport());
 
     $monitor->startTransaction('test');
 
@@ -78,7 +78,7 @@ test('it requires the segment type to not be empty.', function () {
 test('it requires the segment label to be a string.', function () {
     $monitor = new Monitor('an-ingestion-key');
 
-    $monitor->setTransport(new NullTransport);
+    $monitor->setTransport(new NullTransport());
 
     $monitor->startTransaction('test');
 
@@ -88,31 +88,21 @@ test('it requires the segment label to be a string.', function () {
 test('it requires the segment label to not be empty.', function () {
     $monitor = new Monitor('an-ingestion-key');
 
-    $monitor->setTransport(new NullTransport);
+    $monitor->setTransport(new NullTransport());
 
     $monitor->startTransaction('test');
 
     $monitor->startSegment('segment-type', '');
 })->throws(InvalidArgumentException::class, 'Segment label cannot be empty.');
 
-test('a transaction hash starts with "transaction-"', function () {
+test('it automatically generates hash for a new segment.', function () {
     $monitor = new Monitor('an-ingestion-key');
 
-    $monitor->setTransport(new NullTransport);
-
-    $transaction = $monitor->startTransaction('test');
-
-    $this->assertStringStartsWith('transaction-', $transaction->hash);
-});
-
-test('a segment hash starts with "segment-"', function () {
-    $monitor = new Monitor('an-ingestion-key');
-
-    $monitor->setTransport(new NullTransport);
+    $monitor->setTransport(new NullTransport());
 
     $monitor->startTransaction('test');
 
     $segment = $monitor->startSegment('segment-type', 'segment-label');
 
-    $this->assertStringStartsWith('segment-', $segment->hash);
+    $this->assertNotEmpty($segment->hash);
 });
