@@ -6,7 +6,7 @@ use Inspector\Configuration as BaseConfiguration;
 
 class Configuration extends BaseConfiguration
 {
-    public const VERSION = '1.x-dev';
+    public const VERSION = '0.1.0';
 
     protected $version = self::VERSION;
     protected $url = 'https://monitor.dailydesk.app';
