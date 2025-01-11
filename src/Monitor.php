@@ -138,11 +138,18 @@ class Monitor extends Inspector
             $name = $_SERVER['REQUEST_METHOD'] . ' ' . $_SERVER['REQUEST_URI'];
         }
 
-        return $this->startTransaction($name)->setType($type);
+        return $this->startTransaction($name)->setType($type)->setResult('success');
     }
 
     private function isRunningInConsole(): bool
     {
         return \PHP_SAPI === 'cli' || \PHP_SAPI === 'phpdbg';
+    }
+
+    public function begin()
+    {
+        $this->startDefaultTransaction();
+
+        return $this;
     }
 }
