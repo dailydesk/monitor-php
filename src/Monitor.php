@@ -98,6 +98,7 @@ class Monitor extends Inspector
 
         $segment->transaction = [
             'hash' => $segment->transaction['hash'],
+            'timestamp' => $segment->transaction['timestamp'],
         ];
 
         unset($segment->host);
