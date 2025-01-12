@@ -20,7 +20,7 @@ use Throwable;
 
 class Monitor extends Inspector
 {
-    public const VERSION = '1.x-dev';
+    public const VERSION = '0.2.0';
 
     public const URL = 'https://monitor.dailydesk.app';
 
