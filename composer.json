@@ -17,7 +17,7 @@
         }
     },
     "require-dev": {
-        "pestphp/pest": "^3.7",
+        "pestphp/pest": "^2.36 | ^3.7",
         "symfony/var-dumper": "^6.0 | ^7.0"
     },
     "config": {
