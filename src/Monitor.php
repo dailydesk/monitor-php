@@ -2,9 +2,13 @@
 
 namespace DailyDesk\Monitor;
 
+use Closure;
+use DailyDesk\Monitor\Exceptions\LogicException;
+use DailyDesk\Monitor\Exceptions\MonitorException;
 use DailyDesk\Monitor\Transports\CurlTransport;
 use DailyDesk\Monitor\Transports\NullTransport;
 use Exception;
+use Inspector\Configuration;
 use Inspector\Exceptions\InspectorException;
 use Inspector\Inspector;
 use Inspector\Models\Error;
@@ -12,9 +16,16 @@ use Inspector\Models\PerformanceModel;
 use Inspector\Models\Segment;
 use Inspector\Models\Transaction;
 use InvalidArgumentException;
+use Throwable;
 
 class Monitor extends Inspector
 {
+    public const VERSION = '1.x-dev';
+
+    public const URL = 'https://monitor.dailydesk.app';
+
+    protected Closure $detectRunningInConsoleCallback;
+
     /**
      * @param  Configuration|string  $configuration
      * @throws InvalidArgumentException|InspectorException
@@ -25,6 +36,8 @@ class Monitor extends Inspector
             parent::__construct($configuration);
         } elseif (is_string($configuration)) {
             $configuration = new Configuration($configuration);
+
+            $configuration->setUrl(static::URL)->setVersion(static::VERSION);
 
             parent::__construct($configuration);
         } else {
@@ -38,23 +51,51 @@ class Monitor extends Inspector
                 new CurlTransport($configuration)
             );
         }
+
+        $this->detectRunningInConsoleCallback = function () {
+            return \PHP_SAPI === 'cli' || \PHP_SAPI === 'phpdbg';
+        };
     }
 
+    /**
+     * Get the Configuration instance.
+     *
+     * @return \Inspector\Configuration
+     */
     public function getConfiguration(): \Inspector\Configuration
     {
         return $this->configuration;
     }
 
+    /**
+     * Get the Transport instance.
+     *
+     * @return \Inspector\Transports\TransportInterface
+     */
     public function getTransport(): \Inspector\Transports\TransportInterface
     {
         return $this->transport;
     }
 
     /**
-     * @param  string  $name
+     * Set the callback to detect if it's running in console. E.g.: useful for testing or custom runtime.
+     *
+     * @param  Closure  $callback
+     * @return $this
+     */
+    public function detectRunningInConsoleUsing(Closure $callback)
+    {
+        $this->detectRunningInConsoleCallback = $callback;
+
+        return $this;
+    }
+
+    /**
+     * Start a new transaction with the given name.
+     *
+     * @param string $name
      * @return Transaction
-     * @throws InvalidArgumentException
-     * @throws Exception
+     * @throws InvalidArgumentException|Exception
      */
     public function startTransaction($name): Transaction
     {
@@ -106,13 +147,11 @@ class Monitor extends Inspector
         return $segment;
     }
 
-    public function reportException(\Throwable $exception, $handled = true)
+    public function reportException(Throwable $exception, $handled = true)
     {
         if (!$this->hasTransaction()) {
-            $this->startDefaultTransaction();
+            $this->start();
         }
-
-        $this->transaction()->setResult('error');
 
         $segment = $this->startSegment('error', $exception->getMessage());
 
@@ -129,7 +168,19 @@ class Monitor extends Inspector
         return $error;
     }
 
-    private function startDefaultTransaction()
+    private function isRunningInConsole(): bool
+    {
+        return call_user_func($this->detectRunningInConsoleCallback, $this);
+    }
+
+    /**
+     * Start a new Transaction instance.
+     *
+     * @param  Closure|string|null  $callback
+     * @return \Inspector\Models\Transaction
+     * @throws Exception
+     */
+    public function start($callback = null)
     {
         if ($this->isRunningInConsole()) {
             $type = 'command';
@@ -139,18 +190,58 @@ class Monitor extends Inspector
             $name = $_SERVER['REQUEST_METHOD'] . ' ' . $_SERVER['REQUEST_URI'];
         }
 
-        return $this->startTransaction($name)->setType($type)->setResult('success');
+        if (is_string($callback)) {
+            $name = $callback;
+        }
+
+        $transaction = $this->startTransaction($name)->setType($type)->setResult('success');
+
+        if ($callback instanceof Closure) {
+            call_user_func($callback, $transaction);
+        }
+
+        return $transaction;
     }
 
-    private function isRunningInConsole(): bool
+    /**
+     * Record a new segment.
+     *
+     * @param  string $type
+     * @param  string  $label
+     * @param callable $callback
+     * @return Segment
+     * @throws LogicException|MonitorException
+     */
+    public function segment(string $type, string $label, callable $callback)
     {
-        return \PHP_SAPI === 'cli' || \PHP_SAPI === 'phpdbg';
+        if (is_null($this->transaction)) {
+            throw new LogicException('Transaction must be started before recording a segment.');
+        }
+
+        try {
+            return $this->addSegment($callback, $type, $label);
+        } catch (Throwable $e) {
+            throw new MonitorException($e->getMessage(), $e->getCode());
+        }
     }
 
-    public function begin()
+    /**
+     * Report a new error.
+     *
+     * @param Throwable $e
+     * @return \Inspector\Models\Error
+     * @throws LogicException|MonitorException
+     */
+    public function report(Throwable $e)
     {
-        $this->startDefaultTransaction();
+        if (is_null($this->transaction)) {
+            throw new LogicException('Transaction must be started before reporting an error.');
+        }
 
-        return $this;
+        try {
+            return $this->reportException($e);
+        } catch (Throwable $e) {
+            throw new MonitorException($e->getMessage(), $e->getCode());
+        }
     }
 }
