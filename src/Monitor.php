@@ -34,7 +34,7 @@ class Monitor extends Inspector
 
         $this->transport = match ($configuration->getTransport()) {
             'async' => new AsyncTransport($configuration),
-            'curl' => new CurlTransport($configuration),
+            'sync', 'curl' => new CurlTransport($configuration),
             default => new NullTransport(),
         };
     }
