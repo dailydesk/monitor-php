@@ -39,11 +39,6 @@ class Monitor extends Inspector
         };
     }
 
-    public static function generateUniqueHash(int $length = 32): string
-    {
-        return (new Transaction('hash'))->generateUniqueHash($length);
-    }
-
     /**
      * Get the Configuration instance.
      *
@@ -64,45 +59,37 @@ class Monitor extends Inspector
         return $this->transport;
     }
 
-    /**
-     * @return array
-     * @throws \Exception
-     */
-    public function flush()
+    public function startTransaction($name): Transaction
     {
-        $url = $this->configuration->getUrl();
+        return parent::startTransaction($name);
+    }
 
-        $this->configuration->setUrl(trim($url, '/') . '/ingest/entries');
+    public function startSegment($type, $label = null): Segment
+    {
+        $segment = parent::startSegment($type, $label);
 
-        $entries = [];
-        $prevEntry = null;
+        unset($segment->host);
 
-        foreach ($this->transport()->getQueue() as $entry) {
-            if ($entry instanceof Segment) {
-                unset($entry->host);
+        return $segment;
+    }
 
-                if (isset($entry->context['Error']) && $entry->context['Error'] instanceof Error) {
-                    unset($entry->context['Error']);
-                }
-
-                $entry->hash = static::generateUniqueHash();
-                $entry->transaction = ['hash' => $entry->transaction['hash']];
-            } elseif ($entry instanceof Error) {
-                unset($entry->host, $entry->transaction);
-
-                $entry->timestamp = $prevEntry->timestamp;
-                $entry->segment = ['hash' => $prevEntry->hash];
-            }
-
-            $prevEntry = $entry;
-
-            $entries[] = $entry->toArray();
+    public function report(\Throwable $e, $handled = true)
+    {
+        if (!$this->hasTransaction()) {
+            $this->startTransaction(get_class($e))->setType('error');
         }
 
-        parent::flush();
+        $segment = $this->startSegment('error', $e->getMessage());
 
-        $this->configuration->setUrl($url);
+        $error = (new Error($e, $this->transaction))->setHandled($handled);
+        $error->segment = $segment->only(['hash']);
 
-        return $entries;
+        $segment->addContext('error', $error->only([
+            'message', 'class', 'file', 'line', 'code', 'stack', 'handled',
+        ]));
+
+        $segment->end();
+
+        return $error;
     }
 }
