@@ -15,7 +15,7 @@ use Inspector\Transports\TransportInterface;
 
 class Monitor extends Inspector
 {
-    public const VERSION = '1.x-dev';
+    public const VERSION = '0.3.0';
 
     public const URL = 'https://monitor.dailydesk.app';
 
