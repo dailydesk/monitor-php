@@ -2,7 +2,7 @@
 
 namespace DailyDesk\Monitor\Transports;
 
-class CurlTransport extends \Inspector\Transports\CurlTransport
+class AsyncTransport extends \Inspector\Transports\AsyncTransport
 {
     /**
      * @inheritDoc
