@@ -2,6 +2,7 @@
 
 use DailyDesk\Monitor\HandlerInterface;
 use DailyDesk\Monitor\Handlers\NullHandler;
+use DailyDesk\Monitor\Handlers\TransportHandler;
 use DailyDesk\Monitor\Models\Segment;
 use DailyDesk\Monitor\Models\Transaction;
 use DailyDesk\Monitor\Monitor;
@@ -24,17 +25,17 @@ test('it can start/stop recording anytime.', function () {
 
 test('it enables flush on shutdown by default.', function () {
     $monitor = new Monitor();
-    $this->assertTrue($monitor->isFlushOnShutdown());
+    $this->assertTrue($monitor->isAutoFlush());
 });
 
 test('it can enable/disable flush on shutdown later.', function () {
     $monitor = new Monitor();
 
-    $monitor->disableFlushOnShutdown();
-    $this->assertFalse($monitor->isFlushOnShutdown());
+    $monitor->disableAutoFlushMode();
+    $this->assertFalse($monitor->isAutoFlush());
 
-    $monitor->enableFlushOnShutdown();
-    $this->assertTrue($monitor->isFlushOnShutdown());
+    $monitor->enableAutoFlushMode();
+    $this->assertTrue($monitor->isAutoFlush());
 });
 
 test('it does not have a handler instance by default.', function () {
@@ -145,4 +146,13 @@ test('it starts new segments on the current transaction.', function () {
     $monitor->startTransaction('test');
 
     $this->assertTrue($monitor->canAddSegments());
+});
+
+test('it can create a Monitor instance with a single ingestion key.', function () {
+    $key = 'JhQY9Rc2NWVLNDtqhLLffA5cWq1ZM3al';
+    $monitor = Monitor::create($key);
+    $this->assertInstanceOf(Monitor::class, $monitor);
+    $this->assertInstanceOf(TransportHandler::class, $monitor->getHandler());
+    $this->assertTrue($monitor->isRecording());
+    $this->assertTrue($monitor->isAutoFlush());
 });

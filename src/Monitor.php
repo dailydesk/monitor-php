@@ -4,14 +4,14 @@ namespace DailyDesk\Monitor;
 
 use Closure;
 use DailyDesk\Monitor\Exceptions\MonitorException;
+use DailyDesk\Monitor\Handlers\TransportHandler;
 use DailyDesk\Monitor\Models\Segment;
 use DailyDesk\Monitor\Models\Transaction;
+use DailyDesk\Monitor\Transports\CurlTransport;
 
 class Monitor
 {
     public const VERSION = 'dev-main';
-
-    public const URL = 'https://monitor.dailydesk.app';
 
     /**
      * Determine if this monitor is recording.
@@ -25,7 +25,7 @@ class Monitor
      *
      * @var bool
      */
-    protected bool $flushOnShutdown = true;
+    protected bool $autoFlushEnabled = true;
 
     /**
      * The handler instance.
@@ -37,7 +37,7 @@ class Monitor
     /**
      * The current queue.
      *
-     * @var \DailyDesk\Monitor\Models\Transaction[]|\DailyDesk\Monitor\Models\Segment[]
+     * @var Transaction[]|Segment[]
      */
     protected array $queue = [];
 
@@ -56,10 +56,46 @@ class Monitor
     public function __construct()
     {
         register_shutdown_function(function () {
-            if ($this->isFlushOnShutdown()) {
+            if ($this->isAutoFlush()) {
                 $this->flush();
             }
         });
+    }
+
+    /**
+     * Create a new Monitor instance with the given key.
+     *
+     * @param  string  $key
+     * @param  array $options
+     * @return static
+     * @throws MonitorException
+     */
+    public static function create(string $key, array $options = []): static
+    {
+        try {
+            $url = $options['url'] ?? 'https://monitor.dailydesk.app';
+
+            $endpoint = rtrim($url, '/') . '/ingest/entries';
+            $version = $options['version'] ?? static::VERSION;
+            $maxItems = $options['max_items'] ?? 1000;
+
+            $configuration = new \Inspector\Configuration($key);
+            $configuration->setUrl($endpoint);
+            $configuration->setVersion($version);
+            $configuration->setMaxItems($maxItems);
+
+            $transport = new CurlTransport($configuration);
+
+            $handler = new TransportHandler($transport);
+
+            $monitor = new static;
+
+            $monitor->setHandler($handler);
+
+            return $monitor;
+        } catch (\Inspector\Exceptions\InspectorException $e) {
+            throw new MonitorException($e->getMessage(), $e->getCode(), $e);
+        }
     }
 
     /**
@@ -96,9 +132,9 @@ class Monitor
         return $this;
     }
 
-    public function isFlushOnShutdown(): bool
+    public function isAutoFlush(): bool
     {
-        return $this->flushOnShutdown;
+        return $this->autoFlushEnabled;
     }
 
     /**
@@ -106,9 +142,9 @@ class Monitor
      *
      * @return $this
      */
-    public function enableFlushOnShutdown(): self
+    public function enableAutoFlushMode(): self
     {
-        $this->flushOnShutdown = true;
+        $this->autoFlushEnabled = true;
 
         return $this;
     }
@@ -118,9 +154,9 @@ class Monitor
      *
      * @return $this
      */
-    public function disableFlushOnShutdown(): self
+    public function disableAutoFlushMode(): self
     {
-        $this->flushOnShutdown = false;
+        $this->autoFlushEnabled = false;
 
         return $this;
     }
@@ -340,6 +376,8 @@ class Monitor
         } elseif ($this->handler instanceof HandlerInterface) {
             $this->handler->handle($this->queue);
         }
+
+        $this->transaction = null;
 
         $this->resetQueue();
 
