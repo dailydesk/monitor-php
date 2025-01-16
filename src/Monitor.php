@@ -2,94 +2,361 @@
 
 namespace DailyDesk\Monitor;
 
-use DailyDesk\Monitor\Transports\AsyncTransport;
-use DailyDesk\Monitor\Transports\CurlTransport;
-use DailyDesk\Monitor\Transports\NullTransport;
-use Inspector\Configuration;
-use Inspector\Exceptions\InspectorException;
-use Inspector\Inspector;
-use Inspector\Models\Error;
-use Inspector\Models\Segment;
-use Inspector\Models\Transaction;
-use Inspector\Transports\TransportInterface;
+use Closure;
+use DailyDesk\Monitor\Exceptions\MonitorException;
+use DailyDesk\Monitor\Models\Segment;
+use DailyDesk\Monitor\Models\Transaction;
 
-class Monitor extends Inspector
+class Monitor
 {
-    public const VERSION = '1.x-dev';
+    public const VERSION = 'dev-main';
 
     public const URL = 'https://monitor.dailydesk.app';
 
     /**
-     * @param  Configuration|string  $configuration
-     * @throws InspectorException
+     * Determine if this monitor is recording.
+     *
+     * @var bool
      */
-    public function __construct($configuration)
+    protected bool $recording = true;
+
+    /**
+     * Determine if this monitor should flush on shutdown.
+     *
+     * @var bool
+     */
+    protected bool $flushOnShutdown = true;
+
+    /**
+     * The handler instance.
+     *
+     * @var HandlerInterface|Closure|null
+     */
+    protected $handler = null;
+
+    /**
+     * The current queue.
+     *
+     * @var \DailyDesk\Monitor\Models\Transaction[]|\DailyDesk\Monitor\Models\Segment[]
+     */
+    protected array $queue = [];
+
+    /**
+     * The current transaction.
+     *
+     * @var Transaction|null
+     */
+    protected ?Transaction $transaction = null;
+
+    /**
+     * Create a new Monitor instance.
+     *
+     * @throws MonitorException
+     */
+    public function __construct()
     {
-        if (is_string($configuration)) {
-            $configuration = new Configuration($configuration);
-            $configuration->setUrl(self::URL);
+        register_shutdown_function(function () {
+            if ($this->isFlushOnShutdown()) {
+                $this->flush();
+            }
+        });
+    }
+
+    /**
+     * Determine if this monitor is recording.
+     *
+     * @return bool
+     */
+    public function isRecording(): bool
+    {
+        return $this->recording;
+    }
+
+    /**
+     * Start recording.
+     *
+     * @return $this
+     */
+    public function startRecording(): self
+    {
+        $this->recording = true;
+
+        return $this;
+    }
+
+    /**
+     * Stop recording.
+     *
+     * @return $this
+     */
+    public function stopRecording(): self
+    {
+        $this->recording = false;
+
+        return $this;
+    }
+
+    public function isFlushOnShutdown(): bool
+    {
+        return $this->flushOnShutdown;
+    }
+
+    /**
+     * Turn on the flush on shutdown mode.
+     *
+     * @return $this
+     */
+    public function enableFlushOnShutdown(): self
+    {
+        $this->flushOnShutdown = true;
+
+        return $this;
+    }
+
+    /**
+     * Turn off the flush on shutdown mode.
+     *
+     * @return $this
+     */
+    public function disableFlushOnShutdown(): self
+    {
+        $this->flushOnShutdown = false;
+
+        return $this;
+    }
+
+    /**
+     * Get the current handler instance.
+     *
+     * @return Closure|HandlerInterface|null
+     */
+    public function getHandler()
+    {
+        return $this->handler;
+    }
+
+    /**
+     * Set a new handler instance.
+     *
+     * @param Closure|HandlerInterface|null $handler
+     * @return $this
+     */
+    public function setHandler($handler): self
+    {
+        $this->handler = $handler;
+
+        return $this;
+    }
+
+    /**
+     * Get the current queue.
+     *
+     * @return Segment[]|Transaction[]
+     */
+    public function getQueue(): array
+    {
+        return $this->queue;
+    }
+
+    /**
+     * Push one or many entries into the current queue.
+     *
+     * @param  Transaction|Segment|Transaction[]|Segment[]  $entries
+     * @return $this
+     */
+    public function pushIntoQueue($entries): self
+    {
+        if ($this->isRecording()) {
+            $entries = is_array($entries) ? $entries : [$entries];
+            foreach ($entries as $entry) {
+                if ($entry->isStarted()) {
+                    $entry->start();
+                }
+                $this->queue[] = $entry;
+            }
         }
 
-        parent::__construct($configuration);
-
-        $this->transport = match ($configuration->getTransport()) {
-            'async' => new AsyncTransport($configuration),
-            'sync', 'curl' => new CurlTransport($configuration),
-            default => new NullTransport(),
-        };
+        return $this;
     }
 
     /**
-     * Get the Configuration instance.
+     * Reset the current queue.
      *
-     * @return Configuration
+     * @return $this
      */
-    public function configuration(): Configuration
+    public function resetQueue(): self
     {
-        return $this->configuration;
+        $this->queue = [];
+
+        return $this;
     }
 
     /**
-     * Get the Transport instance.
+     * Determine if the monitor holds a transaction.
      *
-     * @return TransportInterface
+     * @return bool
      */
-    public function transport(): TransportInterface
+    public function hasTransaction(): bool
     {
-        return $this->transport;
+        return isset($this->transaction);
     }
 
-    public function startTransaction($name): Transaction
+    /**
+     * Determine if the monitor needs to start a new transaction.
+     *
+     * @return bool
+     */
+    public function needTransaction(): bool
     {
-        return parent::startTransaction($name);
+        return $this->isRecording() && ! $this->hasTransaction();
     }
 
-    public function startSegment($type, $label = null): Segment
+    /**
+     * Determine if the monitor can add segments.
+     *
+     * @return bool
+     */
+    public function canAddSegments(): bool
     {
-        $segment = parent::startSegment($type, $label);
+        return $this->isRecording() && $this->hasTransaction();
+    }
+
+    /**
+     * Get the current transaction.
+     *
+     * @return Transaction|null
+     */
+    public function transaction(): ?Transaction
+    {
+        return $this->transaction;
+    }
+
+    /**
+     * Start a new transaction.
+     *
+     * @param string $name
+     * @return Transaction
+     * @throws \Exception
+     */
+    public function startTransaction(string $name): Transaction
+    {
+        if ($this->hasTransaction()) {
+            $this->endEntriesInQueue();
+        }
+
+        $this->transaction = new Transaction($name);
+        $this->transaction->start();
+
+        $this->pushIntoQueue([$this->transaction]);
+
+        return $this->transaction;
+    }
+
+    /**
+     * Start a new segment.
+     *
+     * @param string $type
+     * @param string $label
+     * @return Segment
+     */
+    public function startSegment(string $type, string $label): Segment
+    {
+        $segment = new Segment($this->transaction, addslashes($type), $label);
+        $segment->start();
 
         unset($segment->host);
+
+        // TODO: Check if it can add segments
+        if ($this->canAddSegments()) {
+            $this->pushIntoQueue([$segment]);
+        }
 
         return $segment;
     }
 
-    public function report(\Throwable $e, $handled = true)
+    /**
+     * Add a new segment.
+     *
+     * @return mixed
+     * @throws \Throwable
+     */
+    public function addSegment(callable $callback, string $type, string $label, bool $throw = false)
     {
-        if (!$this->hasTransaction()) {
-            $this->startTransaction(get_class($e))->setType('error');
+        if (! $this->hasTransaction()) {
+            return $callback();
+        }
+
+        try {
+            $segment = $this->startSegment($type, $label);
+
+            return $callback($segment);
+        } catch (\Throwable $e) {
+            if ($throw === true) {
+                throw $e;
+            }
+
+            $this->report($e);
+        } finally {
+            $segment->end();
+        }
+    }
+
+    /**
+     * Report a Throwable instance.
+     *
+     * @param  \Throwable  $e
+     * @param $handled
+     * @return Segment
+     * @throws \Exception
+     */
+    public function report(\Throwable $e, $handled = false): Segment
+    {
+        $class = get_class($e);
+
+        if (! $this->hasTransaction()) {
+            $this->startTransaction($class)->setType('error');
         }
 
         $segment = $this->startSegment('error', $e->getMessage());
-
-        $error = (new Error($e, $this->transaction))->setHandled($handled);
-        $error->segment = $segment->only(['hash']);
-
-        $segment->addContext('error', $error->only([
-            'message', 'class', 'file', 'line', 'code', 'stack', 'handled',
-        ]));
-
+        $segment->addContext('_monitor', [
+            'error' => Helper::parseErrorData($e, $handled),
+        ]);
         $segment->end();
 
-        return $error;
+        return $segment;
+    }
+
+    /**
+     * Handle all entries in the current queue, then reset it.
+     *
+     * @throws MonitorException
+     */
+    public function flush(): self
+    {
+        $this->endEntriesInQueue();
+
+        if ($this->handler instanceof Closure) {
+            call_user_func($this->handler, $this->queue);
+        } elseif ($this->handler instanceof HandlerInterface) {
+            $this->handler->handle($this->queue);
+        }
+
+        $this->resetQueue();
+
+        return $this;
+    }
+
+    /**
+     * @internal
+     *
+     * @return void
+     */
+    private function endEntriesInQueue(): void
+    {
+        foreach ($this->queue as $entry) {
+            if (! $entry->isEnded()) {
+                $entry->end();
+            }
+        }
     }
 }
