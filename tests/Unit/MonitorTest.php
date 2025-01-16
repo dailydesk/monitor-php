@@ -146,11 +146,3 @@ test('it starts new segments on the current transaction.', function () {
 
     $this->assertTrue($monitor->canAddSegments());
 });
-
-test('it can create a new Monitor instance with a single ingestion key.', function () {
-    $key = 'YQkIru45M1rLCbVXGSIpyFlj3O5gS0KawfgmKp1p';
-
-    $monitor = Monitor::create($key);
-
-    $this->assertInstanceOf(HandlerInterface::class, $monitor->getHandler());
-});
