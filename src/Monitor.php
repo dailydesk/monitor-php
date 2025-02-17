@@ -12,7 +12,7 @@ use Throwable;
 
 class Monitor
 {
-    public const VERSION = 'dev-main';
+    public const VERSION = '1.x-dev';
 
     /**
      * Determine if this monitor is recording.
