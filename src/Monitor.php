@@ -355,7 +355,7 @@ class Monitor
         $class = get_class($e);
 
         if (! $this->hasTransaction()) {
-            $this->startTransaction($class)->setType(Transaction::TYPE_UNEXPECTED);
+            $this->startTransaction($class)->setType(Transaction::TYPE_UNEXPECTED)->markAsFailed();
         }
 
         $segment = $this->startSegment(Segment::TYPE_ERROR, $e->getMessage());

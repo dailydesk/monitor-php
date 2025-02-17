@@ -175,5 +175,9 @@ test('it reports an exception without an existing transaction.', function () {
 
     $monitor->report(new Exception('This is an unexpected exception.'));
 
-    $this->assertSame(Transaction::TYPE_UNEXPECTED, $monitor->transaction()->type);
+    $transaction = $monitor->transaction();
+
+    $this->assertSame('Exception', $transaction->name);
+    $this->assertSame(Transaction::TYPE_UNEXPECTED, $transaction->type);
+    $this->assertSame(Transaction::RESULT_FAILED, $transaction->result);
 });
