@@ -5,6 +5,7 @@ namespace DailyDesk\Monitor\Handlers;
 use DailyDesk\Monitor\Exceptions\MonitorException;
 use DailyDesk\Monitor\HandlerInterface;
 use Inspector\Transports\TransportInterface;
+use Throwable;
 
 class TransportHandler implements HandlerInterface
 {
@@ -14,11 +15,9 @@ class TransportHandler implements HandlerInterface
     }
 
     /**
-     * @param  array  $queue
-     * @return array
-     * @throws MonitorException
+     * @inheritDoc
      */
-    public function handle(array $queue)
+    public function handle(array $queue): void
     {
         try {
             foreach ($queue as $entry) {
@@ -26,12 +25,9 @@ class TransportHandler implements HandlerInterface
             }
 
             $this->transport->flush();
-        } catch (\Throwable $e) {
+        } catch (Throwable $e) {
 
             throw new MonitorException($e->getMessage(), $e->getCode(), $e);
         }
-
-
-        return $queue;
     }
 }

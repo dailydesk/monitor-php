@@ -1,5 +1,11 @@
+.fleet/
 .idea/
+.vscode/
+.zed/
+
 .phpunit.cache/
+
+tinker/
 
 vendor/
 
@@ -8,5 +14,3 @@ vendor/
 
 composer.lock
 composer.phar
-
-test.php

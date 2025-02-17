@@ -1,6 +1,5 @@
 <?php
 
-use DailyDesk\Monitor\HandlerInterface;
 use DailyDesk\Monitor\Handlers\NullHandler;
 use DailyDesk\Monitor\Handlers\TransportHandler;
 use DailyDesk\Monitor\Models\Segment;
@@ -155,4 +154,26 @@ test('it can create a Monitor instance with a single ingestion key.', function (
     $this->assertInstanceOf(TransportHandler::class, $monitor->getHandler());
     $this->assertTrue($monitor->isRecording());
     $this->assertTrue($monitor->isAutoFlush());
+});
+
+test('it reports an exception with an existing transaction.', function () {
+    $monitor = new Monitor();
+
+    $monitor->startTransaction('GET /api/reports');
+
+    $segment = $monitor->report(new Exception('Reporting an exception'));
+
+    $this->assertSame(Segment::TYPE_ERROR, $segment->type);
+
+    $this->assertArrayHasKey('_monitor', $segment->context);
+
+    $this->assertArrayHasKey('error', $segment->context['_monitor']);
+});
+
+test('it reports an exception without an existing transaction.', function () {
+    $monitor = new Monitor();
+
+    $monitor->report(new Exception('This is an unexpected exception.'));
+
+    $this->assertSame(Transaction::TYPE_UNEXPECTED, $monitor->transaction()->type);
 });

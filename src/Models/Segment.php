@@ -2,8 +2,22 @@
 
 namespace DailyDesk\Monitor\Models;
 
-class Segment extends \Inspector\Models\Segment
+use Inspector\Models\Segment as BaseSegment;
+
+/**
+ * @property string $model
+ * @property string $type
+ * @property string $label
+ * @property float $start
+ * @property float $timestamp
+ * @property float $duration
+ * @property array<string, mixed> $context
+ * @property array<string, mixed> $transaction
+ */
+class Segment extends BaseSegment
 {
+    public const TYPE_ERROR = 'error';
+
     public function isStarted(): bool
     {
         return isset($this->timestamp);

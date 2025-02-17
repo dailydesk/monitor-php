@@ -2,7 +2,9 @@
 
 namespace DailyDesk\Monitor\Transports;
 
-class CurlTransport extends \Inspector\Transports\CurlTransport
+use Inspector\Transports\CurlTransport as BaseCurlTransport;
+
+class CurlTransport extends BaseCurlTransport
 {
     /**
      * @inheritDoc
