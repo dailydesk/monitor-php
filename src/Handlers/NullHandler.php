@@ -6,7 +6,10 @@ use DailyDesk\Monitor\HandlerInterface;
 
 class NullHandler implements HandlerInterface
 {
-    public function handle(array $queue)
+    /**
+     * @inheritDoc
+     */
+    public function handle(array $queue): void
     {
         // Do nothing.
     }

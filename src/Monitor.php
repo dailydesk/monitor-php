@@ -8,10 +8,11 @@ use DailyDesk\Monitor\Handlers\TransportHandler;
 use DailyDesk\Monitor\Models\Segment;
 use DailyDesk\Monitor\Models\Transaction;
 use DailyDesk\Monitor\Transports\CurlTransport;
+use Throwable;
 
 class Monitor
 {
-    public const VERSION = 'dev-main';
+    public const VERSION = '1.x-dev';
 
     /**
      * Determine if this monitor is recording.
@@ -37,7 +38,7 @@ class Monitor
     /**
      * The current queue.
      *
-     * @var Transaction[]|Segment[]
+     * @var array<int, Transaction|Segment>
      */
     protected array $queue = [];
 
@@ -88,7 +89,7 @@ class Monitor
 
             $handler = new TransportHandler($transport);
 
-            $monitor = new static;
+            $monitor = new static();
 
             $monitor->setHandler($handler);
 
@@ -197,7 +198,7 @@ class Monitor
     /**
      * Push one or many entries into the current queue.
      *
-     * @param  Transaction|Segment|Transaction[]|Segment[]  $entries
+     * @param  Transaction|Segment|array<int, Transaction|Segment>  $entries
      * @return $this
      */
     public function pushIntoQueue($entries): self
@@ -272,7 +273,7 @@ class Monitor
      *
      * @param string $name
      * @return Transaction
-     * @throws \Exception
+     * @throws MonitorException
      */
     public function startTransaction(string $name): Transaction
     {
@@ -280,10 +281,14 @@ class Monitor
             $this->endEntriesInQueue();
         }
 
-        $this->transaction = new Transaction($name);
-        $this->transaction->start();
+        try {
+            $this->transaction = new Transaction($name);
+            $this->transaction->start();
 
-        $this->pushIntoQueue([$this->transaction]);
+            $this->pushIntoQueue($this->transaction);
+        } catch (Throwable $e) {
+            throw new MonitorException($e->getMessage(), $e->getCode(), $e);
+        }
 
         return $this->transaction;
     }
@@ -304,7 +309,7 @@ class Monitor
 
         // TODO: Check if it can add segments
         if ($this->canAddSegments()) {
-            $this->pushIntoQueue([$segment]);
+            $this->pushIntoQueue($segment);
         }
 
         return $segment;
@@ -313,8 +318,9 @@ class Monitor
     /**
      * Add a new segment.
      *
-     * @return mixed
-     * @throws \Throwable
+     * @return mixed|void
+     *
+     * @throws Throwable
      */
     public function addSegment(callable $callback, string $type, string $label, bool $throw = false)
     {
@@ -326,34 +332,33 @@ class Monitor
             $segment = $this->startSegment($type, $label);
 
             return $callback($segment);
-        } catch (\Throwable $e) {
-            if ($throw === true) {
+        } catch (Throwable $e) {
+            if ($throw) {
                 throw $e;
             }
 
             $this->report($e);
         } finally {
-            $segment->end();
+            if (isset($segment)) {
+                $segment->end();
+            }
         }
     }
 
     /**
      * Report a Throwable instance.
      *
-     * @param  \Throwable  $e
-     * @param $handled
-     * @return Segment
-     * @throws \Exception
+     * @throws Throwable
      */
-    public function report(\Throwable $e, $handled = false): Segment
+    public function report(Throwable $e, bool $handled = false): Segment
     {
         $class = get_class($e);
 
         if (! $this->hasTransaction()) {
-            $this->startTransaction($class)->setType('error');
+            $this->startTransaction($class)->setType(Transaction::TYPE_UNEXPECTED);
         }
 
-        $segment = $this->startSegment('error', $e->getMessage());
+        $segment = $this->startSegment(Segment::TYPE_ERROR, $e->getMessage());
         $segment->addContext('_monitor', [
             'error' => Helper::parseErrorData($e, $handled),
         ]);

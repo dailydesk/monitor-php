@@ -11,10 +11,9 @@ interface HandlerInterface
     /**
      * Send the given queue via HTTP, save into database or export to some files,...
      *
-     * @param  Transaction[]|Segment[]  $queue
-     * @return mixed
+     * @param  array<int, Transaction|Segment>  $queue
      *
      * @throws MonitorException
      */
-    public function handle(array $queue);
+    public function handle(array $queue): void;
 }

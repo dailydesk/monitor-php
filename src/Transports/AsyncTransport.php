@@ -2,7 +2,9 @@
 
 namespace DailyDesk\Monitor\Transports;
 
-class AsyncTransport extends \Inspector\Transports\AsyncTransport
+use Inspector\Transports\AsyncTransport as BaseAsyncTransport;
+
+class AsyncTransport extends BaseAsyncTransport
 {
     /**
      * @inheritDoc
