@@ -74,14 +74,14 @@ class Monitor
     public static function create(string $key, array $options = []): static
     {
         try {
-            $url = $options['url'] ?? 'https://monitor.dailydesk.app';
+            $base = $options['url'] ?? 'https://ingest.dailydesk.app';
 
-            $endpoint = rtrim($url, '/') . '/ingest/entries';
+            $url = rtrim($base, '/') . '/entries';
             $version = $options['version'] ?? static::VERSION;
             $maxItems = $options['max_items'] ?? 1000;
 
             $configuration = new \Inspector\Configuration($key);
-            $configuration->setUrl($endpoint);
+            $configuration->setUrl($url);
             $configuration->setVersion($version);
             $configuration->setMaxItems($maxItems);
 

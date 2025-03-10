@@ -3,7 +3,7 @@
     "description": "DailyDesk Monitor for PHP applications.",
     "license": "MIT",
     "require": {
-        "php": "^8.1",
+        "php": "^8.2",
         "inspector-apm/inspector-php": "^3.8"
     },
     "autoload": {
