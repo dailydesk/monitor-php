@@ -9,7 +9,7 @@ use DailyDesk\Monitor\Models\Transaction;
 interface HandlerInterface
 {
     /**
-     * Send the given queue via HTTP, save into database or export to some files,...
+     * Send the given queue via HTTP, save into database or export to files,...
      *
      * @param  array<int, Transaction|Segment>  $queue
      *

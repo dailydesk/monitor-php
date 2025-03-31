@@ -8,6 +8,8 @@ use DailyDesk\Monitor\Handlers\TransportHandler;
 use DailyDesk\Monitor\Models\Segment;
 use DailyDesk\Monitor\Models\Transaction;
 use DailyDesk\Monitor\Transports\CurlTransport;
+use Inspector\Configuration as InspectorConfiguration;
+use Inspector\Exceptions\InspectorException;
 use Throwable;
 
 class Monitor
@@ -16,24 +18,18 @@ class Monitor
 
     /**
      * Determine if this monitor is recording.
-     *
-     * @var bool
      */
     protected bool $recording = true;
 
     /**
      * Determine if this monitor should flush on shutdown.
-     *
-     * @var bool
      */
     protected bool $autoFlushEnabled = true;
 
     /**
      * The handler instance.
-     *
-     * @var HandlerInterface|Closure|null
      */
-    protected $handler = null;
+    protected HandlerInterface|Closure|null $handler = null;
 
     /**
      * The current queue.
@@ -44,8 +40,6 @@ class Monitor
 
     /**
      * The current transaction.
-     *
-     * @var Transaction|null
      */
     protected ?Transaction $transaction = null;
 
@@ -67,7 +61,7 @@ class Monitor
      * Create a new Monitor instance with the given key.
      *
      * @param  string  $key
-     * @param  array $options
+     * @param  array<string, mixed>  $options
      * @return static
      * @throws MonitorException
      */
@@ -80,7 +74,7 @@ class Monitor
             $version = $options['version'] ?? static::VERSION;
             $maxItems = $options['max_items'] ?? 1000;
 
-            $configuration = new \Inspector\Configuration($key);
+            $configuration = new InspectorConfiguration($key);
             $configuration->setUrl($url);
             $configuration->setVersion($version);
             $configuration->setMaxItems($maxItems);
@@ -94,15 +88,13 @@ class Monitor
             $monitor->setHandler($handler);
 
             return $monitor;
-        } catch (\Inspector\Exceptions\InspectorException $e) {
+        } catch (InspectorException $e) {
             throw new MonitorException($e->getMessage(), $e->getCode(), $e);
         }
     }
 
     /**
      * Determine if this monitor is recording.
-     *
-     * @return bool
      */
     public function isRecording(): bool
     {
@@ -111,8 +103,6 @@ class Monitor
 
     /**
      * Start recording.
-     *
-     * @return $this
      */
     public function startRecording(): self
     {
@@ -123,8 +113,6 @@ class Monitor
 
     /**
      * Stop recording.
-     *
-     * @return $this
      */
     public function stopRecording(): self
     {
@@ -133,15 +121,16 @@ class Monitor
         return $this;
     }
 
+    /**
+     * Determine if the auto flush mode is enabled.
+     */
     public function isAutoFlush(): bool
     {
         return $this->autoFlushEnabled;
     }
 
     /**
-     * Turn on the flush on shutdown mode.
-     *
-     * @return $this
+     * Turn on the auto flush mode.
      */
     public function enableAutoFlushMode(): self
     {
@@ -151,9 +140,7 @@ class Monitor
     }
 
     /**
-     * Turn off the flush on shutdown mode.
-     *
-     * @return $this
+     * Turn off the auto flush mode.
      */
     public function disableAutoFlushMode(): self
     {
@@ -164,21 +151,16 @@ class Monitor
 
     /**
      * Get the current handler instance.
-     *
-     * @return Closure|HandlerInterface|null
      */
-    public function getHandler()
+    public function getHandler(): HandlerInterface|Closure|null
     {
         return $this->handler;
     }
 
     /**
      * Set a new handler instance.
-     *
-     * @param Closure|HandlerInterface|null $handler
-     * @return $this
      */
-    public function setHandler($handler): self
+    public function setHandler(HandlerInterface|Closure|null $handler): self
     {
         $this->handler = $handler;
 
@@ -188,7 +170,7 @@ class Monitor
     /**
      * Get the current queue.
      *
-     * @return Segment[]|Transaction[]
+     * @return array<int, Transaction|Segment>
      */
     public function getQueue(): array
     {
@@ -199,9 +181,8 @@ class Monitor
      * Push one or many entries into the current queue.
      *
      * @param  Transaction|Segment|array<int, Transaction|Segment>  $entries
-     * @return $this
      */
-    public function pushIntoQueue($entries): self
+    public function pushIntoQueue(Transaction|Segment|array $entries): self
     {
         if ($this->isRecording()) {
             $entries = is_array($entries) ? $entries : [$entries];
@@ -218,8 +199,6 @@ class Monitor
 
     /**
      * Reset the current queue.
-     *
-     * @return $this
      */
     public function resetQueue(): self
     {
@@ -230,8 +209,6 @@ class Monitor
 
     /**
      * Determine if the monitor holds a transaction.
-     *
-     * @return bool
      */
     public function hasTransaction(): bool
     {
@@ -240,8 +217,6 @@ class Monitor
 
     /**
      * Determine if the monitor needs to start a new transaction.
-     *
-     * @return bool
      */
     public function needTransaction(): bool
     {
@@ -250,8 +225,6 @@ class Monitor
 
     /**
      * Determine if the monitor can add segments.
-     *
-     * @return bool
      */
     public function canAddSegments(): bool
     {
@@ -260,8 +233,6 @@ class Monitor
 
     /**
      * Get the current transaction.
-     *
-     * @return Transaction|null
      */
     public function transaction(): ?Transaction
     {
@@ -271,8 +242,6 @@ class Monitor
     /**
      * Start a new transaction.
      *
-     * @param string $name
-     * @return Transaction
      * @throws MonitorException
      */
     public function startTransaction(string $name): Transaction
@@ -295,10 +264,6 @@ class Monitor
 
     /**
      * Start a new segment.
-     *
-     * @param string $type
-     * @param string $label
-     * @return Segment
      */
     public function startSegment(string $type, string $label): Segment
     {
@@ -307,7 +272,6 @@ class Monitor
 
         unset($segment->host);
 
-        // TODO: Check if it can add segments
         if ($this->canAddSegments()) {
             $this->pushIntoQueue($segment);
         }
@@ -391,8 +355,6 @@ class Monitor
 
     /**
      * @internal
-     *
-     * @return void
      */
     private function endEntriesInQueue(): void
     {

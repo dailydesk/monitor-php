@@ -9,7 +9,7 @@ class AsyncTransport extends BaseAsyncTransport
     /**
      * @inheritDoc
      */
-    protected function getApiHeaders()
+    protected function getApiHeaders(): array
     {
         return [
             'Content-Type' => 'application/json',
