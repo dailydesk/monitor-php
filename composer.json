@@ -1,6 +1,6 @@
 {
     "name": "dailydesk/monitor-php",
-    "description": "DailyDesk Monitor for PHP applications.",
+    "description": "DailyDesk Monitor for PHP",
     "license": "MIT",
     "require": {
         "php": "^8.2",

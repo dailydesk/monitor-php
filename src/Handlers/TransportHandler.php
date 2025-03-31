@@ -7,9 +7,9 @@ use DailyDesk\Monitor\HandlerInterface;
 use Inspector\Transports\TransportInterface;
 use Throwable;
 
-class TransportHandler implements HandlerInterface
+readonly class TransportHandler implements HandlerInterface
 {
-    public function __construct(private readonly TransportInterface $transport)
+    public function __construct(private TransportInterface $transport)
     {
         //
     }

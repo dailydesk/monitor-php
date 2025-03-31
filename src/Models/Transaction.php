@@ -32,9 +32,6 @@ class Transaction extends BaseTransaction
     {
         parent::__construct($name);
 
-        // TODO: Allow to customize host.
-        $this->host = new Host();
-
         $this->setResult(self::RESULT_SUCCESS);
     }
 
