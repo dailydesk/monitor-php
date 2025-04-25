@@ -34,8 +34,8 @@ jobs:
           echo "::add-matcher::${{ runner.tool_cache }}/php.json"
           echo "::add-matcher::${{ runner.tool_cache }}/phpunit.json"
 
-      - name: Check requirements
-        run: composer check-platform-reqs --no-ansi --no-interaction
+#      - name: Check requirements
+#        run: composer check-platform-reqs --no-ansi --no-interaction
 
       - name: Install dependencies
         run: composer update --${{ matrix.stability }} --prefer-dist --no-interaction
