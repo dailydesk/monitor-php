@@ -17,10 +17,10 @@ readonly class TransportHandler implements HandlerInterface
     /**
      * @inheritDoc
      */
-    public function handle(array $queue): void
+    public function handle(array $entries): void
     {
         try {
-            foreach ($queue as $entry) {
+            foreach ($entries as $entry) {
                 $this->transport->addEntry($entry);
             }
 

@@ -1,4 +1,4 @@
-name: Test
+name: test
 
 on:
   push:
@@ -22,14 +22,11 @@ jobs:
     name: PHP${{ matrix.php }} - ${{ matrix.stability }} - ${{ matrix.os }}
 
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
-      - name: Setup PHP
-        uses: shivammathur/setup-php@v2
+      - uses: shivammathur/setup-php@v2
         with:
           php-version: ${{ matrix.php }}
-          extensions: dom, curl, libxml, mbstring, zip, pcntl, pdo, sqlite, pdo_sqlite, bcmath, soap, intl, gd, exif, iconv, imagick, fileinfo
           coverage: none
 
       - name: Setup problem matchers
@@ -37,11 +34,14 @@ jobs:
           echo "::add-matcher::${{ runner.tool_cache }}/php.json"
           echo "::add-matcher::${{ runner.tool_cache }}/phpunit.json"
 
+#      - name: Check requirements
+#        run: composer check-platform-reqs --no-ansi --no-interaction
+
       - name: Install dependencies
         run: composer update --${{ matrix.stability }} --prefer-dist --no-interaction
 
-      - name: List Installed Dependencies
+      - name: List installed dependencies
         run: composer show -D
 
-      - name: Execute pest command
+      - name: Run the pest command
         run: vendor/bin/pest --ci
