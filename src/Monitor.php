@@ -315,7 +315,7 @@ class Monitor
         ]);
 
         foreach ($entries as $entry) {
-            if ($entry->isEnded()) {
+            if (! $entry->isEnded()) {
                 $entry->end();
             }
         }
