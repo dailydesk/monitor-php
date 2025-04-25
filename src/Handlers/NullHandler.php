@@ -9,7 +9,7 @@ readonly class NullHandler implements HandlerInterface
     /**
      * @inheritDoc
      */
-    public function handle(array $queue): void
+    public function handle(array $entries): void
     {
         // Do nothing.
     }

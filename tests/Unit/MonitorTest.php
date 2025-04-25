@@ -1,18 +1,19 @@
 <?php
 
+use DailyDesk\Monitor\Exceptions\MissingTransactionException;
 use DailyDesk\Monitor\Handlers\NullHandler;
 use DailyDesk\Monitor\Handlers\TransportHandler;
 use DailyDesk\Monitor\Models\Segment;
 use DailyDesk\Monitor\Models\Transaction;
 use DailyDesk\Monitor\Monitor;
 
-test('it starts recording by default.', function () {
+test('it should start recording by default.', function () {
     $monitor = new Monitor();
 
     $this->assertTrue($monitor->isRecording());
 });
 
-test('it can start/stop recording anytime.', function () {
+test('it can start or stop recording.', function () {
     $monitor = new Monitor();
 
     $monitor->stopRecording();
@@ -22,28 +23,28 @@ test('it can start/stop recording anytime.', function () {
     $this->assertTrue($monitor->isRecording());
 });
 
-test('it enables flush on shutdown by default.', function () {
+test('it should enable "flush on shutdown" by default.', function () {
     $monitor = new Monitor();
-    $this->assertTrue($monitor->isAutoFlush());
+    $this->assertTrue($monitor->isFlushOnShutdown());
 });
 
-test('it can enable/disable flush on shutdown later.', function () {
+test('it can enable or disable "flush on shutdown".', function () {
     $monitor = new Monitor();
 
-    $monitor->disableAutoFlushMode();
-    $this->assertFalse($monitor->isAutoFlush());
+    $monitor->disableFlushOnShutdown();
+    $this->assertFalse($monitor->isFlushOnShutdown());
 
-    $monitor->enableAutoFlushMode();
-    $this->assertTrue($monitor->isAutoFlush());
+    $monitor->enableFlushOnShutdown();
+    $this->assertTrue($monitor->isFlushOnShutdown());
 });
 
-test('it does not have a handler instance by default.', function () {
+test('it does not have a handler by default.', function () {
     $monitor = new Monitor();
 
     $this->assertNull($monitor->getHandler());
 });
 
-test('it can get/set a handler instance later.', function () {
+test('it can set a handler.', function () {
     $monitor = new Monitor();
 
     $monitor->setHandler($handler = new NullHandler());
@@ -53,131 +54,96 @@ test('it can get/set a handler instance later.', function () {
     $this->assertSame($handler, $monitor->getHandler());
 });
 
-test('it will push entries into the queue when recording is on.', function () {
+test('it must turn on recording before starting a transaction.', function () {
     $monitor = new Monitor();
-    $this->assertEmpty($monitor->getQueue());
-
-    $monitor->pushIntoQueue($transaction = new Transaction('test'));
-    $monitor->pushIntoQueue($segment1 = new Segment($transaction, 'type', 'label'));
-    $monitor->pushIntoQueue($segment2 = new Segment($transaction, 'type', 'label'));
-    $monitor->pushIntoQueue($segment3 = new Segment($transaction, 'type', 'label'));
-
-    $this->assertEquals([$transaction, $segment1, $segment2, $segment3], $monitor->getQueue());
-});
-
-test('it will not push entries into the queue when recording is off.', function () {
-    $monitor = new Monitor();
-    $this->assertEmpty($monitor->getQueue());
-
-    $monitor->pushIntoQueue($transaction = new Transaction('test'));
-    $monitor->pushIntoQueue($segment1 = new Segment($transaction, 'type', 'label'));
 
     $monitor->stopRecording();
 
-    $monitor->pushIntoQueue(new Segment($transaction, 'type', 'label'));
-    $monitor->pushIntoQueue(new Segment($transaction, 'type', 'label'));
+    $monitor->startTransaction('pest:test');
+})->throws(MissingTransactionException::class);
 
-    $this->assertEquals([$transaction, $segment1], $monitor->getQueue());
-});
-
-test('it can reset the current queue.', function () {
-    $monitor = new Monitor();
-    $this->assertEmpty($monitor->getQueue());
-
-    $monitor->pushIntoQueue($transaction = new Transaction('test'));
-    $monitor->pushIntoQueue(new Segment($transaction, 'type', 'label'));
-    $monitor->pushIntoQueue(new Segment($transaction, 'type', 'label'));
-    $monitor->pushIntoQueue(new Segment($transaction, 'type', 'label'));
-
-    $this->assertCount(4, $monitor->getQueue());
-
-    $monitor->resetQueue();
-
-    $this->assertCount(0, $monitor->getQueue());
-});
-
-test('it can start a new transaction.', function () {
+test('it can start a transaction.', function () {
     $monitor = new Monitor();
 
-    $this->assertFalse($monitor->hasTransaction());
-    $t1 = $monitor->startTransaction('test1');
-    $this->assertTrue($monitor->hasTransaction());
-    $this->assertSame($t1, $monitor->transaction());
-    $t2 = $monitor->startTransaction('test2');
-    $this->assertSame($t2, $monitor->transaction());
+    $transaction = $monitor->startTransaction('pest:test');
+
+    $this->assertSame($transaction, $monitor->transaction());
 });
 
-test('it need a new transaction when recording is on and there is no transaction.', function () {
+test('it can start a segment before starting transaction.', function () {
     $monitor = new Monitor();
 
-    $this->assertTrue($monitor->isRecording());
-    $this->assertFalse($monitor->hasTransaction());
-    $this->assertTrue($monitor->needTransaction());
+    $segment = $monitor->startSegment('query', 'Get 10 users from database.');
 
-    $monitor->stopRecording();
+    $this->assertSame('dummy', $segment->transaction['name']);
+    $this->assertEmpty($monitor->getSegments());
 
-    $this->assertFalse($monitor->isRecording());
-    $this->assertFalse($monitor->hasTransaction());
-    $this->assertFalse($monitor->needTransaction());
+    $result = $monitor->addSegment(function () {
+        return 'hello';
+    }, 'query', 'Get 10 users from database.');
 
-    $monitor->startRecording()->startTransaction('test');
-
-    $this->assertTrue($monitor->isRecording());
-    $this->assertTrue($monitor->hasTransaction());
-    $this->assertFalse($monitor->needTransaction());
+    $this->assertSame('hello', $result);
+    $this->assertEmpty($monitor->getSegments());
 });
 
-test('it must start a new transaction before adding segments', function () {
+test('it can start a segment after starting transaction.', function () {
     $monitor = new Monitor();
 
-    $this->assertFalse($monitor->canAddSegments());
+    $transaction = $monitor->startTransaction('pest:test');
 
-    $monitor->startTransaction('test');
+    $s1 = $monitor->startSegment('query', 'Get 10 users from database.');
 
-    $this->assertTrue($monitor->canAddSegments());
+    $this->assertSame($transaction->name, $s1->transaction['name']);
+    $this->assertSame($transaction->hash, $s1->transaction['hash']);
+    $this->assertSame($transaction->timestamp, $s1->transaction['timestamp']);
+
+    $this->assertSame($transaction, $monitor->transaction());
+    $this->assertSame([$s1], $monitor->getSegments());
+
+    $result = $monitor->addSegment(function () {
+        return 'hello';
+    }, 'query', 'Get 10 users from database.');
+
+    $this->assertSame('hello', $result);
+    $this->assertCount(2, $monitor->getSegments());
+
+    $s2 = $monitor->getSegments()[1];
+
+    $this->assertSame($transaction->name, $s2->transaction['name']);
+    $this->assertSame($transaction->hash, $s2->transaction['hash']);
+    $this->assertSame($transaction->timestamp, $s2->transaction['timestamp']);
 });
 
-test('it starts new segments on the current transaction.', function () {
+test('it can report an exception before starting transaction.', function () {
     $monitor = new Monitor();
 
-    $this->assertFalse($monitor->canAddSegments());
+    $segment = $monitor->report(new Exception('Something went wrong'));
 
-    $monitor->startTransaction('test');
+    $this->assertSame(Segment::TYPE_ERROR, $segment->type);
+    $this->assertArrayHasKey('_monitor', $segment->context);
+    $this->assertArrayHasKey('error', $segment->context['_monitor']);
 
-    $this->assertTrue($monitor->canAddSegments());
+    $transaction = $monitor->transaction();
+
+    $this->assertSame($transaction->name, $segment->transaction['name']);
+    $this->assertSame($transaction->hash, $segment->transaction['hash']);
+    $this->assertSame($transaction->timestamp, $segment->transaction['timestamp']);
 });
 
-test('it can create a Monitor instance with a single ingestion key.', function () {
+test('it can report an exception after starting transaction.', function () {
+    $monitor = new Monitor();
+    $transaction = $monitor->startTransaction('pest:test');
+    $segment = $monitor->report(new Exception('Something went wrong'));
+    $this->assertSame($transaction->name, $segment->transaction['name']);
+    $this->assertSame($transaction->hash, $segment->transaction['hash']);
+    $this->assertSame($transaction->timestamp, $segment->transaction['timestamp']);
+});
+
+test('it can create an instance with a ingestion key.', function () {
     $key = 'JhQY9Rc2NWVLNDtqhLLffA5cWq1ZM3al';
     $monitor = Monitor::create($key);
     $this->assertInstanceOf(Monitor::class, $monitor);
     $this->assertInstanceOf(TransportHandler::class, $monitor->getHandler());
     $this->assertTrue($monitor->isRecording());
-    $this->assertTrue($monitor->isAutoFlush());
-});
-
-test('it reports an exception with an existing transaction.', function () {
-    $monitor = new Monitor();
-
-    $monitor->startTransaction('GET /api/reports');
-
-    $segment = $monitor->report(new Exception('Reporting an exception'));
-
-    $this->assertSame(Segment::TYPE_ERROR, $segment->type);
-
-    $this->assertArrayHasKey('_monitor', $segment->context);
-
-    $this->assertArrayHasKey('error', $segment->context['_monitor']);
-});
-
-test('it reports an exception without an existing transaction.', function () {
-    $monitor = new Monitor();
-
-    $monitor->report(new Exception('This is an unexpected exception.'));
-
-    $transaction = $monitor->transaction();
-
-    $this->assertSame('Exception', $transaction->name);
-    $this->assertSame(Transaction::TYPE_UNEXPECTED, $transaction->type);
-    $this->assertSame(Transaction::RESULT_FAILED, $transaction->result);
+    $this->assertTrue($monitor->isFlushOnShutdown());
 });

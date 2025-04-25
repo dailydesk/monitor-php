@@ -3,6 +3,7 @@
 namespace DailyDesk\Monitor;
 
 use Closure;
+use DailyDesk\Monitor\Exceptions\MissingTransactionException;
 use DailyDesk\Monitor\Exceptions\MonitorException;
 use DailyDesk\Monitor\Handlers\TransportHandler;
 use DailyDesk\Monitor\Models\Segment;
@@ -24,7 +25,7 @@ class Monitor
     /**
      * Determine if this monitor should flush on shutdown.
      */
-    protected bool $autoFlushEnabled = true;
+    protected bool $flushOnShutdown = true;
 
     /**
      * The handler instance.
@@ -32,16 +33,14 @@ class Monitor
     protected HandlerInterface|Closure|null $handler = null;
 
     /**
-     * The current queue.
-     *
-     * @var array<int, Transaction|Segment>
-     */
-    protected array $queue = [];
-
-    /**
      * The current transaction.
      */
     protected ?Transaction $transaction = null;
+
+    /**
+     * @var array<int, Segment>
+     */
+    protected array $segments = [];
 
     /**
      * Create a new Monitor instance.
@@ -51,7 +50,7 @@ class Monitor
     public function __construct()
     {
         register_shutdown_function(function () {
-            if ($this->isAutoFlush()) {
+            if ($this->isFlushOnShutdown()) {
                 $this->flush();
             }
         });
@@ -122,35 +121,35 @@ class Monitor
     }
 
     /**
-     * Determine if the auto flush mode is enabled.
+     * Determine if the "flush on shutdown" mode is enabled.
      */
-    public function isAutoFlush(): bool
+    public function isFlushOnShutdown(): bool
     {
-        return $this->autoFlushEnabled;
+        return $this->flushOnShutdown;
     }
 
     /**
-     * Turn on the auto flush mode.
+     * Turn off the "flush on shutdown" mode.
      */
-    public function enableAutoFlushMode(): self
+    public function disableFlushOnShutdown(): self
     {
-        $this->autoFlushEnabled = true;
+        $this->flushOnShutdown = false;
 
         return $this;
     }
 
     /**
-     * Turn off the auto flush mode.
+     * Turn on the "flush on shutdown" mode.
      */
-    public function disableAutoFlushMode(): self
+    public function enableFlushOnShutdown(): self
     {
-        $this->autoFlushEnabled = false;
+        $this->flushOnShutdown = true;
 
         return $this;
     }
 
     /**
-     * Get the current handler instance.
+     * Get the handler instance.
      */
     public function getHandler(): HandlerInterface|Closure|null
     {
@@ -168,43 +167,11 @@ class Monitor
     }
 
     /**
-     * Get the current queue.
-     *
-     * @return array<int, Transaction|Segment>
+     * Get the current transaction.
      */
-    public function getQueue(): array
+    public function transaction(): ?Transaction
     {
-        return $this->queue;
-    }
-
-    /**
-     * Push one or many entries into the current queue.
-     *
-     * @param  Transaction|Segment|array<int, Transaction|Segment>  $entries
-     */
-    public function pushIntoQueue(Transaction|Segment|array $entries): self
-    {
-        if ($this->isRecording()) {
-            $entries = is_array($entries) ? $entries : [$entries];
-            foreach ($entries as $entry) {
-                if ($entry->isStarted()) {
-                    $entry->start();
-                }
-                $this->queue[] = $entry;
-            }
-        }
-
-        return $this;
-    }
-
-    /**
-     * Reset the current queue.
-     */
-    public function resetQueue(): self
-    {
-        $this->queue = [];
-
-        return $this;
+        return $this->transaction;
     }
 
     /**
@@ -232,11 +199,11 @@ class Monitor
     }
 
     /**
-     * Get the current transaction.
+     * @return array<int, Segment>
      */
-    public function transaction(): ?Transaction
+    public function getSegments(): array
     {
-        return $this->transaction;
+        return $this->segments;
     }
 
     /**
@@ -246,15 +213,13 @@ class Monitor
      */
     public function startTransaction(string $name): Transaction
     {
-        if ($this->hasTransaction()) {
-            $this->endEntriesInQueue();
+        if (! $this->isRecording()) {
+            throw new MissingTransactionException('You must turn on recording to start a transaction.');
         }
 
         try {
             $this->transaction = new Transaction($name);
             $this->transaction->start();
-
-            $this->pushIntoQueue($this->transaction);
         } catch (Throwable $e) {
             throw new MonitorException($e->getMessage(), $e->getCode(), $e);
         }
@@ -267,14 +232,18 @@ class Monitor
      */
     public function startSegment(string $type, string $label): Segment
     {
+        if (! $this->hasTransaction()) {
+            $transaction = new Transaction('dummy');
+            $transaction->start();
+            return new Segment($transaction, addslashes($type), $label);
+        }
+
         $segment = new Segment($this->transaction, addslashes($type), $label);
         $segment->start();
 
         unset($segment->host);
 
-        if ($this->canAddSegments()) {
-            $this->pushIntoQueue($segment);
-        }
+        $this->segments[] = $segment;
 
         return $segment;
     }
@@ -295,7 +264,7 @@ class Monitor
         try {
             $segment = $this->startSegment($type, $label);
 
-            return $callback($segment);
+            return $callback();
         } catch (Throwable $e) {
             if ($throw) {
                 throw $e;
@@ -318,8 +287,10 @@ class Monitor
     {
         $class = get_class($e);
 
-        if (! $this->hasTransaction()) {
-            $this->startTransaction($class)->setType(Transaction::TYPE_UNEXPECTED)->markAsFailed();
+        if ($this->needTransaction()) {
+            $this->startTransaction($class)
+                ->setType(Transaction::TYPE_UNEXPECTED)
+                ->markAsFailed();
         }
 
         $segment = $this->startSegment(Segment::TYPE_ERROR, $e->getMessage());
@@ -338,30 +309,36 @@ class Monitor
      */
     public function flush(): self
     {
-        $this->endEntriesInQueue();
+        $entries = array_filter([
+            $this->transaction,
+            ...$this->segments,
+        ]);
 
-        if ($this->handler instanceof Closure) {
-            call_user_func($this->handler, $this->queue);
-        } elseif ($this->handler instanceof HandlerInterface) {
-            $this->handler->handle($this->queue);
+        foreach ($entries as $entry) {
+            if ($entry->isEnded()) {
+                $entry->end();
+            }
         }
 
-        $this->transaction = null;
+        if ($this->handler instanceof Closure) {
+            call_user_func($this->handler, $entries);
+        } elseif ($this->handler instanceof HandlerInterface) {
+            $this->handler->handle($entries);
+        }
 
-        $this->resetQueue();
+        $this->clear();
 
         return $this;
     }
 
     /**
-     * @internal
+     * Clear the transaction and segments.
      */
-    private function endEntriesInQueue(): void
+    public function clear(): self
     {
-        foreach ($this->queue as $entry) {
-            if (! $entry->isEnded()) {
-                $entry->end();
-            }
-        }
+        $this->transaction = null;
+        $this->segments = [];
+
+        return $this;
     }
 }
