@@ -257,14 +257,10 @@ class Monitor
      */
     public function addSegment(callable $callback, string $type, string $label, bool $throw = false)
     {
-        if (! $this->hasTransaction()) {
-            return $callback();
-        }
-
         try {
             $segment = $this->startSegment($type, $label);
 
-            return $callback();
+            return $callback($segment);
         } catch (Throwable $e) {
             if ($throw) {
                 throw $e;

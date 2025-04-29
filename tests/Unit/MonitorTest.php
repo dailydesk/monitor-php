@@ -147,3 +147,48 @@ test('it can create an instance with a ingestion key.', function () {
     $this->assertTrue($monitor->isRecording());
     $this->assertTrue($monitor->isFlushOnShutdown());
 });
+
+test('it can pass the segment instance into the callback.', function () {
+    $monitor = new Monitor;
+
+    $expected = null;
+
+    $result = $monitor->addSegment(function (Segment $segment) use (&$expected) {
+        return $expected = $segment;
+    }, 'query', 'Get 10 users');
+
+    $this->assertInstanceOf(Segment::class, $result);
+    $this->assertSame($expected, $result);
+});
+
+test('it can check if we need a transaction to be started.', function () {
+    $monitor = new Monitor;
+
+    // monitor is recording, but no transaction started.
+    $this->assertTrue($monitor->needTransaction());
+
+    // monitor is NOT recording, even no transaction started.
+    $monitor->stopRecording();
+    $this->assertFalse($monitor->needTransaction());
+
+    // monitor is recording, but a transaction already started.
+    $monitor->startRecording();
+    $monitor->startTransaction('pest:test');
+    $this->assertFalse($monitor->needTransaction());
+});
+
+test('it can check if we are able to add segments.', function () {
+    $monitor = new Monitor();
+
+    // monitor is recording, but no transaction started.
+    $this->assertFalse($monitor->canAddSegments());
+
+    // monitor is NOT recording, even no transaction started.
+    $monitor->stopRecording();
+    $this->assertFalse($monitor->canAddSegments());
+
+    // $monitor is recording and a transaction already started.
+    $monitor->startRecording();
+    $monitor->startTransaction('pest:test');
+    $this->assertTrue($monitor->canAddSegments());
+});
