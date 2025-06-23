@@ -1,78 +1,36 @@
 <?php
 
-namespace DailyDesk\Monitor\Models;
+namespace Monitor\Models;
 
-use Inspector\Models\Partials\Http;
 use Inspector\Models\Transaction as BaseTransaction;
 
-/**
- * @property string $model
- * @property string $hash
- * @property string $type
- * @property string $name
- * @property string $result
- * @property float $timestamp
- * @property float $duration
- * @property float $memory_peak
- * @property array<string, mixed> $context
- * @property Host $host
- * @property ?Http $http
- * @property ?User $user
- */
 class Transaction extends BaseTransaction
 {
-    public const TYPE_COMMAND = 'command';
-    public const TYPE_REQUEST = 'request';
-    public const TYPE_UNEXPECTED = 'unexpected';
-
-    public const RESULT_SUCCESS = 'success';
-    public const RESULT_FAILED = 'failed';
-
-    public function __construct(string $name)
+    /**
+     * Create a new Transaction instance.
+     */
+    public function __construct(string $name, string $type)
     {
         parent::__construct($name);
-
-        $this->setResult(self::RESULT_SUCCESS);
+        $this->type = $type;
     }
 
-    public function markAsCommand(): self
+    public function end(int|float|null $duration = null): self
     {
-        $this->setType(self::TYPE_COMMAND);
-
+        parent::end($duration);
         return $this;
     }
 
-    public function markAsRequest(): self
+    public function toArray(): array
     {
-        $this->setType(self::TYPE_REQUEST);
-        $this->http = new Http();
-
-        return $this;
-    }
-
-    public function markAsSuccess(): self
-    {
-        $this->result = self::RESULT_SUCCESS;
-
-        return $this;
-    }
-
-    public function markAsFailed(): self
-    {
-        $this->result = self::RESULT_FAILED;
-
-        return $this;
-    }
-
-    public function setName(string $name): self
-    {
-        $this->name = $name;
-
-        return $this;
-    }
-
-    public function isStarted(): bool
-    {
-        return isset($this->timestamp);
+        return [
+            'hash' => $this->hash,
+            'type' => $this->type,
+            'name' => $this->name,
+            'start' => $this->timestamp,
+            'duration' => $this->duration,
+            'context' => $this->context,
+            'memory_peak' => $this->memory_peak,
+        ];
     }
 }

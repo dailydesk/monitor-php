@@ -1,16 +1,16 @@
 <?php
 
-namespace DailyDesk\Monitor\Handlers;
+namespace Monitor\Handlers;
 
-use DailyDesk\Monitor\HandlerInterface;
+use Monitor\Models\Transaction;
 
-readonly class NullHandler implements HandlerInterface
+class NullHandler implements Handler
 {
     /**
      * @inheritDoc
      */
-    public function handle(array $entries): void
+    public function handle(Transaction $transaction): void
     {
-        // Do nothing.
+        //
     }
 }

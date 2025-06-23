@@ -1,10 +1,8 @@
 <?php
 
-namespace DailyDesk\Monitor\Exceptions;
+namespace Monitor\Exceptions;
 
-use Exception;
-
-class MonitorException extends Exception
+class MonitorException extends \Exception
 {
     //
 }
