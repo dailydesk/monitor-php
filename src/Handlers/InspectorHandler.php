@@ -17,6 +17,16 @@ class InspectorHandler implements Handler
      */
     public function handle(Transaction $transaction): void
     {
-        $this->transport->addEntry($transaction)->flush();;
+        $this->transport->addEntry($transaction)->flush();
+
+        foreach ($transaction->getSegments() as $segment) {
+            $this->transport->addEntry($segment);
+
+            if ($error = $segment->getError()) {
+                $this->transport->addEntry($error);
+            }
+        }
+
+        $this->transport->flush();
     }
 }

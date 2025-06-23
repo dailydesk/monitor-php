@@ -4,8 +4,10 @@ namespace Monitor;
 
 use Monitor\Exceptions\MonitorException;
 use Monitor\Handlers\Handler;
+use Monitor\Models\Error;
+use Monitor\Models\Segment;
 use Monitor\Models\Transaction;
-
+use Throwable;
 
 class Monitor
 {
@@ -129,6 +131,48 @@ class Monitor
         $this->transaction->end();
 
         return $this;
+    }
+
+    public function startSegment(string $type, ?string $label = null): Segment
+    {
+        if (!$this->transaction) {
+            throw new MonitorException('No transaction is currently in progress. Please start a transaction before starting a segment.');
+        }
+
+        $segment = new Segment($this->transaction, addslashes($type), $label);
+        $segment->start();
+        $this->transaction->addSegment($segment);
+        return $segment;
+    }
+
+    public function addSegment(callable $callback, string $type, ?string $label = null, bool $throw = false): mixed
+    {
+        $segment = $this->startSegment($type, $label);
+
+        try {
+            return $callback($segment);
+        } catch (\Throwable $exception) {
+            if ($throw === true) {
+                throw $exception;
+            }
+
+            $this->report($exception);
+        } finally {
+            $segment->end();
+        }
+
+        return null;
+    }
+
+    public function report(Throwable $exception, bool $handled = false): Segment
+    {
+        $segment = $this->startSegment('exception', $exception->getMessage());
+
+        $error = (new Error($exception, $this->transaction))->setHandled($handled);
+
+        $segment->setError($error)->end();
+
+        return $segment;
     }
 
     public function flush(): self

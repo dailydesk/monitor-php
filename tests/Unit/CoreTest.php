@@ -48,3 +48,49 @@ test('it throws an exception if a transaction is already in progress.', function
 
     $monitor->start('pest:test2');
 });
+
+test('it can add context to a transaction.', function () {
+    $monitor = new Monitor();
+
+    $monitor->start('pest:test');
+
+    $monitor->context('key', 'value');
+
+    $transaction = $monitor->transaction();
+
+    $this->assertSame(['key' => 'value'], $transaction->context);
+
+    $transaction->end();
+});
+
+test('it throws an exception if no transaction is in progress when adding context.', function () {
+    $monitor = new Monitor();
+
+    $this->expectException(MonitorException::class);
+    $this->expectExceptionMessage('No transaction is currently in progress. Please start a transaction before adding context.');
+
+    $monitor->context('key', 'value');
+});
+
+test('it can set a result for a transaction.', function () {
+    $monitor = new Monitor();
+
+    $monitor->start('pest:test');
+
+    $monitor->result('success');
+
+    $transaction = $monitor->transaction();
+
+    $this->assertSame('success', $transaction->result);
+
+    $transaction->end();
+});
+
+test('it throws an exception if no transaction is in progress when setting a result.', function () {
+    $monitor = new Monitor();
+
+    $this->expectException(MonitorException::class);
+    $this->expectExceptionMessage('No transaction is currently in progress. Please start a transaction before setting a result.');
+
+    $monitor->result('success');
+});

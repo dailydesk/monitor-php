@@ -7,6 +7,11 @@ use Inspector\Models\Transaction as BaseTransaction;
 class Transaction extends BaseTransaction
 {
     /**
+     * @var Segment[]
+     */
+    protected array $segments = [];
+
+    /**
      * Create a new Transaction instance.
      */
     public function __construct(string $name, string $type)
@@ -19,6 +24,20 @@ class Transaction extends BaseTransaction
     {
         parent::end($duration);
         return $this;
+    }
+
+    public function addSegment(Segment $segment): self
+    {
+        $this->segments[] = $segment;
+        return $this;
+    }
+
+    /**
+     * @return Segment[]
+     */
+    public function getSegments(): array
+    {
+        return $this->segments;
     }
 
     public function toArray(): array
